@@ -1,66 +1,17 @@
-## Foundry
+# Design of the Stable Coin (X)
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+- Relative Stability : pegged to USD
 
-Foundry consists of:
+  -  chainlink price feeds to be used to extract the data feeds
+  -  set a func to exchange ETH and BTC with equivalent USD or X
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+- Stability mechanism (minting) : Algorithmic(dece) instead of Collateralized (which is centralized)
+  -  ppl can only mint hte stabel coin X with enough collateral
+- Collateral (will be exogennous )
 
-## Documentation
+  -  wETH
+  -  wBTC
 
-https://book.getfoundry.sh/
+> the wrapped version (ERC20 versions) of ETH and BTC
 
-## Usage
-
-### Build
-
-```shell
-$ forge build
-```
-
-### Test
-
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+> exogneous vars are vars that are not affected by the choide func in an econ system
