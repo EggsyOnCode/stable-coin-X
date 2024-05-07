@@ -30,7 +30,6 @@ pragma solidity ^0.8.18;
 /// @notice  A stablecoin that is pegged to the value of the US dollar
 /// @dev Collateral: Exogenous (Crypto), Minting: Decentralized (Algortihmic), Anchored (pegged)
 
-
 // This is the contract meant to be owned by XEngine. It is a ERC20 token that can be minted and burned by the XEngine smart contract.
 
 import {ERC20Burnable, ERC20} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
@@ -40,7 +39,6 @@ contract XStableCoin is ERC20, ERC20Burnable, Ownable {
     error XStableCoin_BurnBalanceLessThanAmt();
     error XStableCoin_NegativeAmt();
     error XStableCoin_MintToZeroAddress();
-
 
     constructor() ERC20("XStableCoin", "XSC") {}
 
