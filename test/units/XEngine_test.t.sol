@@ -14,9 +14,14 @@ contract XEngineTest is Test {
     address public wethPriceFeed;
     address public weth;
 
+    address public USER = makeAddr("user");
+    uint256 public INITBALANCE = 100 ether;
+
     function setUp() external {
         (engine, stableCoin, helperConfig) = new XDeployment().run();
         (, wethPriceFeed,, weth,) = helperConfig.activeNetworkConfig();
+
+        vm.deal(USER, INITBALANCE);
     }
 
     //////////// Price Feed Tests ////////////
@@ -24,11 +29,22 @@ contract XEngineTest is Test {
     function testDepositComplete() public {
         //setUp
         uint256 amount = 15e18; // 15 ethers in wei
-        // 15e18 * 2000/ether = 3000e18
+        // 15e18 * 2000/ether = 30000e18
         //execution
         uint256 expectedUsdPrice = 30000e18;
         uint256 actualUsd = engine._getUsdPrice(weth, amount);
         //assert
         assertEq(actualUsd, expectedUsdPrice);
+    }
+
+    //// depositCollateral Tests ////
+
+    function testUserDepositZeroCollateral() public {
+        //setUp
+        uint256 amount = 0;
+        //execution
+        engine.depositCollateral(weth, amount);
+        //assert
+        assertEq(engine.getCollateralDeposited(USER), 0);
     }
 }
