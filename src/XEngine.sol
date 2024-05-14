@@ -25,7 +25,7 @@
 pragma solidity ^0.8.18;
 
 import {XStableCoin} from "./XStableCoin.sol";
-import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 /*
@@ -56,7 +56,8 @@ contract XEngine is ReentrancyGuard {
     error XEngine_MismatchedLengthPriceFeedsAndTokenAddresses();
     error XEngine_UnallowedToken();
     error XEngine_TransferFailed();
-
+    error XEngine_MintFailed();
+    error XEngine_BreaksHealthFactor();
     ///////
     //StateVars///
     ///////
@@ -69,6 +70,9 @@ contract XEngine is ReentrancyGuard {
     address[] private s_collateralTokens;
     uint256 private constant PRECISION = 1e18;
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
+    uint256 private constant LIQUIDATION_THRESHOLD = 50; //200% overcollateralized
+    uint256 private constant LIQUIDATION_PRECISION = 100;
+    uint256 private constant MIN_HEALTH_FACTOR = 1;
 
     ///////
     //Events//
@@ -145,55 +149,55 @@ contract XEngine is ReentrancyGuard {
 
         // check if the user minted too much (150X for 100$)
         _revertIfHealthFactorIsBroken(msg.sender);
+        //if the mint fails the tx would be revereted by teh mint function
+        i_XStableCoin.mint(msg.sender, amtX);
     }
 
-    function liquidate() external {}
-
-    //////////////INTERNAL FUNCTIONS////////////////////
-
-    /// @notice returns how close to liquidation a user is
-    /// if the health factor is less than 1, the user is undercollateralized hence liquidated
-    /// @param user user address
-    function _healthFactor(address user) internal view {
-        // calcaulte total X minted by the user
-        // calculate total collateral deposited by the user
-        (uint256 totalCollateral, uint256 totalX) = _getUserAccountInfo(user);
-        // how to do SafeMath?
-        if (totalX / totalCollateral < 1) {
-            // liquidate
-        }
-    }
-
-    /// @dev
-    /// @param Documents a parameter just like in doxygen (must be followed by parameter name)
-    /// @return Documents the return variables of a contract’s function state variable
-    /// @inheritdoc	Copies all missing tags from the base function (must be followed by the contract name)
-    function _revertIfHealthFactorIsBroken(address user) internal view {
-        // check the heath factor of the user
-        // liquidate if below 1
-    }
-
-    function _getUserAccountInfo(address user) internal view returns (uint256 totalCollateral, uint256 totalX) {
-        uint256 totalMinted = s_XMinted[user];
-        uint256 totalCollateral = getCollateralDeposited(user);
-        return (totalMinted, totalCollateral);
-    }
-
-    function _getUsdPrice(address token, uint256 amt) internal view returns (uint256) {
-        AggreagtorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[token]);
+    /////////////////////PUBLIC and EXTERNAL VIEW FUNCTIONS////////////////////////
+    function _getUsdPrice(address token, uint256 amt) public view returns (uint256) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(s_priceFeeds[token]);
         (, int256 price,,,) = priceFeed.latestRoundData();
         // say 1 eth = 1000usd
         // value returned will be 1000 * 1e8
         return ((uint256(price) * ADDITIONAL_FEED_PRECISION) * amt) / PRECISION; // (1000 * 1e8) * (1000 usd amt * 1e18 wei)
     }
 
-    /////////////////////PUBLIC and EXTERNAL VIEW FUNCTIONS////////////////////////
-
-    function getCollateralDeposited(address user) external view returns (uint256 totalCollateral) {
+    function getCollateralDeposited(address user) public view returns (uint256 totalCollateral) {
         // return the total collateral deposited by the user in USD
         for (uint256 i = 0; i < s_collateralTokens.length; i++) {
             uint256 amtDeposited = s_collateralDeposited[user][s_collateralTokens[i]];
             totalCollateral += amtDeposited * _getUsdPrice(s_collateralTokens[i], amtDeposited);
         }
+    }
+
+    //////////////INTERNAL FUNCTIONS////////////////////
+
+    /// @notice returns how close to liquidation a user is
+    /// if the health factor is less than 1, the user is undercollateralized hence liquidated
+    /// @param user user address
+    function _healthFactor(address user) internal returns (uint256) {
+        // calcaulte total X minted by the user
+        // calculate total collateral deposited by the user
+        (uint256 totalCollateral, uint256 totalX) = _getUserAccountInfo(user);
+        uint256 collateralAjustedForThreshold = (totalCollateral * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
+        return (collateralAjustedForThreshold * PRECISION) / totalX;
+    }
+
+    function _revertIfHealthFactorIsBroken(address user) internal {
+        // check the heath factor of the user
+        // liquidate if below 1
+        uint256 userHealthFactor = _healthFactor(user);
+        if (userHealthFactor < MIN_HEALTH_FACTOR) {
+            // liquidate the user
+            revert XEngine_BreaksHealthFactor();
+        }
+    }
+
+    function _liquidate(address user) internal {}
+
+    function _getUserAccountInfo(address user) internal view returns (uint256, uint256) {
+        uint256 totalMinted = s_XMinted[user];
+        uint256 totalCollateral = getCollateralDeposited(user);
+        return (totalMinted, totalCollateral);
     }
 }

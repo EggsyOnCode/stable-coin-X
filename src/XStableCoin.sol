@@ -40,7 +40,7 @@ contract XStableCoin is ERC20, ERC20Burnable, Ownable {
     error XStableCoin_NegativeAmt();
     error XStableCoin_MintToZeroAddress();
 
-    constructor() ERC20("XStableCoin", "XSC") {}
+    constructor() ERC20("XStableCoin", "XSC") Ownable(msg.sender) {}
 
     //External Functions
     function mint(address to, uint256 amount) external onlyOwner {
