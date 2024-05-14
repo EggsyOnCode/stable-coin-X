@@ -115,13 +115,12 @@ contract XEngine is ReentrancyGuard {
     ///////
     //External func///
     ///////
-    function depostiCollateralAndMintX() external {}
 
     /// @notice follows CEI pattern(modiifers are checks, then effectsm then interction with other contracts at the end)
     /// @param tokenCollateralAddress The ERC20 contract address of the token to be deposited as collateral like ETH
     /// @param collateralAmt The amount of collateral to be deposited
     function depositCollateral(address tokenCollateralAddress, uint256 collateralAmt)
-        external
+        public
         moreThanZero(collateralAmt)
         isAllowedToken(tokenCollateralAddress)
         nonReentrant
@@ -138,13 +137,60 @@ contract XEngine is ReentrancyGuard {
         }
     }
 
-    function redeemCollateral() external {}
+    function depostiCollateralAndMintX(address tokenCollateralAddress, uint256 collateralAmt, uint256 amtMnt)
+        external
+    {
+        depositCollateral(tokenCollateralAddress, collateralAmt);
+        mintX(amtMnt);
+    }
 
-    function redeemCollateralForX() external {}
+    /// @notice Redeems the collateral deposited by the user
+    function redeemCollateral(address tokenCollateralAddress, uint256 collateralAmt)
+        public
+        nonReentrant
+        moreThanZero(collateralAmt)
+    {
+        s_collateralDeposited[msg.sender][tokenCollateralAddress] -= collateralAmt;
+        emit CollateralDepsited(msg.sender, tokenCollateralAddress, collateralAmt);
+        bool success = IERC20(tokenCollateralAddress).transfer(msg.sender, collateralAmt);
+        if (!success) {
+            revert XEngine_TransferFailed();
+        }
+        //  check if health factor is  not broken
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
 
-    function burnX() external {}
+    // 100 $ ETH --> depsited as collateral
+    // 20 $ X minted
+    // FOR redeeming now; you must 1. burn 20 X 2. redeem 100$ ETH cuz we can never be undercollateralized at any time
 
-    function mintX(uint256 amtX) external nonReentrant {
+    /// @param tokenAmt: amount of X to be burnt
+    /// @param tokenCollateralAddress: address of the token in which collateral is deposited (ERC20 token)
+    /// @param collateralAmt: amt of collateral to be redeemed
+    function redeemCollateralForX(address tokenCollateralAddress, uint256 collateralAmt, uint256 tokenAmt)
+        external
+        nonReentrant
+    {
+        burnX(tokenAmt);
+        redeemCollateral(tokenCollateralAddress, collateralAmt);
+    }
+
+    function burnX(uint256 amt) public moreThanZero(amt) {
+        s_XMinted[msg.sender] -= amt;
+        // transfering ownership to Engine ; promotng Single Resp Func
+        // Engine should be resp for maanging the funds and not the ERC20 contract
+        // IMP design pricniple
+        bool success = i_XStableCoin.transferFrom(msg.sender, address(this), amt);
+        if (!success) {
+            revert XEngine_TransferFailed();
+        }
+        // burn the X
+        i_XStableCoin.burn(amt);
+        // check if the user is undercollateralized
+        _revertIfHealthFactorIsBroken(msg.sender);
+    }
+
+    function mintX(uint256 amtX) public nonReentrant {
         s_XMinted[msg.sender] += amtX;
 
         // check if the user minted too much (150X for 100$)

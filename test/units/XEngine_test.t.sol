@@ -6,6 +6,7 @@ import {HelperConfig} from "../../script/HelperConfig.s.sol";
 import {XStableCoin} from "../../src/XStableCoin.sol";
 import {XEngine} from "../../src/XEngine.sol";
 import {XDeployment} from "../../script/XDeployment.sol";
+import {ERC20Mock} from "../mocks/ERC20Mock.sol";
 
 contract XEngineTest is Test {
     XEngine public engine;
@@ -20,8 +21,6 @@ contract XEngineTest is Test {
     function setUp() external {
         (engine, stableCoin, helperConfig) = new XDeployment().run();
         (, wethPriceFeed,, weth,) = helperConfig.activeNetworkConfig();
-
-        vm.deal(USER, INITBALANCE);
     }
 
     //////////// Price Feed Tests ////////////
@@ -39,12 +38,11 @@ contract XEngineTest is Test {
 
     //// depositCollateral Tests ////
 
-    function testUserDepositZeroCollateral() public {
-        //setUp
-        uint256 amount = 0;
-        //execution
-        engine.depositCollateral(weth, amount);
-        //assert
-        assertEq(engine.getCollateralDeposited(USER), 0);
+    function testRevertDepsitDueToZeroCollateral() public {
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(engine), INITBALANCE);
+        vm.expectRevert(XEngine.XEngine_MoreThanZero.selector);
+        engine.depositCollateral(weth, 0);
+        vm.stopPrank();
     }
 }
