@@ -1,36 +1,16 @@
 // SPDX-License-Identifier: MIT
 
 // This is considered an Exogenous, Decentralized, Anchored (pegged), Crypto Collateralized low volitility coin
-
-// Layout of Contract:
-// version
-// imports
-// interfaces, libraries, contracts
-// errors
-// Type declarations
-// State variables
-// Events
-// Modifiers
-// Functions
-
-// Layout of Functions:
-// constructor
-// receive function (if exists)
-// fallback function (if exists)
-// external
-// public
-// internal
-// private
-// view & pure functions
 pragma solidity ^0.8.18;
 
 import {XStableCoin} from "./XStableCoin.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {OracleLib} from "./libraries/OracleLib.sol";
 /*
  * @title XEngine
- * @author Patrick Collins
  *
  * The system is designed to be as minimal as possible, and have the tokens maintain a 1 token == $1 peg at all times.
  * This is a stablecoin with the properties:
@@ -60,9 +40,15 @@ contract XEngine is ReentrancyGuard {
     error XEngine_BreaksHealthFactor();
     error XEngine_HealthFactorOk();
     error XEngine_HealthFactorNotImproved();
+
+    /// Types
+    using OracleLib for AggregatorV3Interface;
+
     ///////
     //StateVars///
     ///////
+
+    using Math for uint256;
 
     mapping(address token => address priceFeeds) private s_priceFeeds;
     XStableCoin immutable i_XStableCoin;
@@ -131,7 +117,7 @@ contract XEngine is ReentrancyGuard {
         //register the collateral deposited
         s_collateralDeposited[msg.sender][tokenCollateralAddress] += collateralAmt;
 
-        emit CollateralDepsited(msg.sender, msg.sender, tokenCollateralAddress, collateralAmt);
+        emit CollateralDepsited(msg.sender, address(this), tokenCollateralAddress, collateralAmt);
 
         //interface for the ERC20 token used as adapter over the tokenCollateralAddress to invoke ERC20 specific func over it
         bool suc = IERC20(tokenCollateralAddress).transferFrom(msg.sender, address(this), collateralAmt);
@@ -144,7 +130,7 @@ contract XEngine is ReentrancyGuard {
         external
     {
         depositCollateral(tokenCollateralAddress, collateralAmt);
-        mintX(amtMnt);
+        _mintX(amtMnt);
     }
 
     // 100 $ ETH --> depsited as collateral
@@ -175,15 +161,6 @@ contract XEngine is ReentrancyGuard {
         _burnX(amt, msg.sender, msg.sender);
         // check if the user is undercollateralized
         _revertIfHealthFactorIsBroken(msg.sender);
-    }
-
-    function mintX(uint256 amtX) public nonReentrant {
-        s_XMinted[msg.sender] += amtX;
-
-        // check if the user minted too much (150X for 100$)
-        _revertIfHealthFactorIsBroken(msg.sender);
-        //if the mint fails the tx would be revereted by teh mint function
-        i_XStableCoin.mint(msg.sender, amtX);
     }
 
     /*
@@ -271,6 +248,15 @@ contract XEngine is ReentrancyGuard {
 
     //////////////INTERNAL FUNCTIONS////////////////////
 
+    function _mintX(uint256 amtX) internal nonReentrant {
+        s_XMinted[msg.sender] += amtX;
+
+        // check if the user minted too much (150X for 100$)
+        _revertIfHealthFactorIsBroken(msg.sender);
+        //if the mint fails the tx would be revereted by teh mint function
+        i_XStableCoin.mint(msg.sender, amtX);
+    }
+
     /// @notice returns how close to liquidation a user is
     /// if the health factor is less than 1, the user is undercollateralized hence liquidated
     /// @param user user address
@@ -278,6 +264,8 @@ contract XEngine is ReentrancyGuard {
         // calcaulte total X minted by the user
         // calculate total collateral deposited by the user
         (uint256 totalCollateral, uint256 totalX) = _getUserAccountInfo(user);
+        // if the person is not minting any X, then the health factor is max
+        if (totalX == 0) return type(uint256).max;
         uint256 collateralAjustedForThreshold = (totalCollateral * LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
         return (collateralAjustedForThreshold * PRECISION) / totalX;
     }
@@ -308,6 +296,7 @@ contract XEngine is ReentrancyGuard {
     {
         s_collateralDeposited[from][tokenCollateralAddress] -= collateralAmt;
         emit CollateralDepsited(from, to, tokenCollateralAddress, collateralAmt);
+        //here from would be the msg.sender which would be the address(this) ; so no need for transferFrom
         bool success = IERC20(tokenCollateralAddress).transfer(to, collateralAmt);
         if (!success) {
             revert XEngine_TransferFailed();
@@ -327,5 +316,10 @@ contract XEngine is ReentrancyGuard {
         }
         // burn the X
         i_XStableCoin.burn(amt);
+    }
+
+    // VIEW public
+    function totalSuply() public view returns (uint256) {
+        return i_XStableCoin.totalSupply();
     }
 }

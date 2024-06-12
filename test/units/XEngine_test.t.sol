@@ -67,4 +67,10 @@ contract XEngineTest is Test {
         engine.depositCollateral(weth, 0);
         vm.stopPrank();
     }
+
+    // testing stableCoin inital supply
+
+    function testInitSupplyStableCoin() public {
+        assertEq(stableCoin.totalSupply(), 0);
+    }
 }
